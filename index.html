@@ -10,14 +10,14 @@
 <body>
     <div class="container">
         <h1>AI Demand Forecasting</h1>
-        
+
         <p><strong>CSV Upload Instructions:</strong></p>
-<ul>
-    <li>Upload a CSV file that contains <strong>Product Name</strong>, <strong>Sales</strong>, and <strong>Date</strong>.</li>
-    <li>Column names can vary (e.g., "Product", "Item Name", "Sales Revenue", "Quantity Sold", "Transaction Date", etc.).</li>
-    <li>The system will automatically detect the correct columns.</li>
-    <li>Ensure the file is in <strong>CSV format</strong>.</li>
-</ul>
+        <ul>
+            <li>Upload a CSV file that contains <strong>Product Name</strong>, <strong>Sales</strong>, and <strong>Date</strong>.</li>
+            <li>Column names can vary (e.g., "Product", "Item Name", "Sales Revenue", "Quantity Sold", "Transaction Date", etc.).</li>
+            <li>The system will automatically detect the correct columns.</li>
+            <li>Ensure the file is in <strong>CSV format</strong>.</li>
+        </ul>
 
         <!-- File Upload -->
         <div class="section">
@@ -36,17 +36,17 @@
             <h2>Predict Future Sales</h2>
             <label for="productInput">Enter Product Name:</label>
             <input type="text" id="productInput" placeholder="e.g., Laptop">
-            
+
             <label for="dateInput">Select Date:</label>
             <input type="date" id="dateInput">
-            
-            <button id="predictBtn">Predict</button>
+
+            <button id="predictButton">Predict</button>
             <p id="predictionResult"></p>
         </div>
     </div>
 
+    <!-- Load JavaScript Files -->
     <script src="./assets/js/graph.js"></script>
     <script src="./assets/js/predict.js"></script>
-    <script src="./assets/js/script.js"></script>
 </body>
 </html>
