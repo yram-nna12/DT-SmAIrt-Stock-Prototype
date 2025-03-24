@@ -1,14 +1,5 @@
 document.getElementById("generateGraph").addEventListener("click", function () {
     const fileInput = document.getElementById("csvFile");
-    
-    // Check if window.salesData is available (processed by predict.js)
-    if (window.salesData && window.salesData.length > 0) {
-        console.log("Using pre-processed window.salesData for graphing.");
-        plotGraphs(window.salesData);
-        return;
-    }
-
-    // Fallback to processing the CSV if window.salesData is not available
     if (!fileInput.files.length) {
         alert("Please upload a CSV file first.");
         return;
@@ -19,11 +10,35 @@ document.getElementById("generateGraph").addEventListener("click", function () {
 
     reader.onload = function (event) {
         const text = event.target.result;
-        const data = processCSV(text);
-        plotGraphs(data);
+        window.salesData = processCSV(text); // Store data globally
+        plotGraph(window.salesData);
     };
 
     reader.readAsText(file);
+});
+
+document.querySelector(".sales-month-button").addEventListener("click", function () {
+    if (!window.salesData || window.salesData.length === 0) {
+        alert("Please upload and generate the graph first.");
+        return;
+    }
+    plotSalesPerMonth(window.salesData);
+});
+
+document.querySelector(".top-product-button").addEventListener("click", function () {
+    if (!window.salesData || window.salesData.length === 0) {
+        alert("Please upload and generate the graph first.");
+        return;
+    }
+    displayTopSellingProduct(window.salesData);
+});
+
+document.querySelector(".stock-product-button").addEventListener("click", function () {
+    if (!window.salesData || window.salesData.length === 0) {
+        alert("Please upload and generate the graph first.");
+        return;
+    }
+    displayCurrentStock(window.salesData);
 });
 
 function processCSV(csvText) {
@@ -34,163 +49,116 @@ function processCSV(csvText) {
         return [];
     }
 
-    // Detect column positions dynamically (ignores order and case)
-    const headers = rows[0].map(h => h.toLowerCase().trim().replace(/^\uFEFF/, "").replace(/[^a-z0-9 ]/g, ""));
-    console.log("🛠 CSV Headers Detected (Cleaned):", headers); // Debugging
-
-    const dateIndex = headers.findIndex(h => h.includes("date"));
-    const productIndex = headers.findIndex(h => h.includes("product"));
-    const salesIndex = headers.findIndex(h => h.includes("sales") || h.includes("quantity"));
-    const stockIndex = headers.findIndex(h => {
-        const cleanedHeader = h.replace(/\s/g, ""); // Remove spaces for matching
-        return cleanedHeader.includes("stock") || cleanedHeader.includes("inventory") || cleanedHeader.includes("availablestock") || cleanedHeader.includes("remaining") || cleanedHeader.includes("stocklevel");
-    });
-
-    console.log("✅ Detected Column Indexes:", { dateIndex, productIndex, salesIndex, stockIndex });
-
-    // Debug if stock column is not found
-    if (stockIndex === -1) {
-        console.warn("⚠️ Stock column not found! Defaulting stock values to 0. Headers after cleaning:", headers);
-    }
-
-    // Require only Date, Product, and Sales columns; Stock is optional
-    if (dateIndex === -1 || productIndex === -1 || salesIndex === -1) {
-        alert("CSV format is incorrect. Ensure it includes Date, Product, and Sales columns.");
-        console.error("⚠️ Missing required columns detected! Headers found:", headers);
-        return [];
-    }
-
-    return rows.slice(1).map((row, index) => {
-        console.log(`📌 Row ${index + 1}:`, row); // Debugging - check how data is split
-
-        if (row.length < headers.length) {
-            console.error(`⚠️ Skipping row ${index + 1}: Incomplete data`, row);
-            return null;
-        }
-
-        let product = row[productIndex]?.trim().toLowerCase();
-        let rawStock = stockIndex !== -1 ? row[stockIndex]?.trim() : "0"; // Default to "0" if stock column is missing
-        // Clean the stock value by removing all non-numeric characters except the first number
-        let cleanedStock = rawStock ? rawStock.replace(/[^0-9]/g, "") : "0";
-        let parsedStock = parseInt(cleanedStock, 10);
-
-        console.log(`✅ Processing stock for ${product}: Raw Value = '${rawStock}', Cleaned = '${cleanedStock}', Parsed = ${parsedStock}`);
-
-        return {
-            date: new Date(row[dateIndex] || ""), // Convert to Date object
-            product: product || "unknown",
-            sales: parseInt(row[salesIndex], 10) || 0,
-            stock: isNaN(parsedStock) ? 0 : parsedStock // Treat invalid stock as 0
-        };
-    }).filter(entry => entry && !isNaN(entry.date.getTime())); // Remove invalid dates
+    return rows.slice(1).map(row => ({
+        date: row[0] || "Unknown Date",
+        product: (row[1] || "").toLowerCase(),
+        sales: parseInt(row[2], 10) || 0
+    }));
 }
 
-function plotGraphs(data) {
+function plotGraph(data) {
     if (!data.length) {
         alert("No valid data found in CSV.");
         return;
     }
 
-    const monthlySales = {};
-    const totalSales = {};
-    const currentStock = {};
+    const ctx = document.getElementById("graphCanvas").getContext("2d");
+    const groupedData = {};
 
     data.forEach(entry => {
-        const monthYear = `${entry.date.getFullYear()}-${entry.date.getMonth() + 1}`;
-        if (!monthlySales[monthYear]) {
-            monthlySales[monthYear] = {};
+        if (!groupedData[entry.date]) {
+            groupedData[entry.date] = 0;
         }
-        if (!monthlySales[monthYear][entry.product]) {
-            monthlySales[monthYear][entry.product] = 0;
-        }
-        monthlySales[monthYear][entry.product] += entry.sales;
-
-        if (!totalSales[entry.product]) {
-            totalSales[entry.product] = 0;
-        }
-        totalSales[entry.product] += entry.sales;
-
-        // Store the latest stock value per product
-        currentStock[entry.product] = entry.stock !== undefined ? entry.stock : 0; // Ensure stock is not undefined
+        groupedData[entry.date] += entry.sales;
     });
 
-    plotMonthlySalesGraph(monthlySales);
-    plotTopSellingProductsGraph(totalSales);
-    plotCurrentStockList(currentStock);
-}
-
-function plotMonthlySalesGraph(monthlySales) {
-    const ctx = document.getElementById("monthlySalesGraph").getContext("2d");
-    const labels = Object.keys(monthlySales);
-    const datasets = [];
-    const productNames = new Set();
-
-    Object.values(monthlySales).forEach(productSales => {
-        Object.keys(productSales).forEach(product => productNames.add(product));
-    });
-
-    productNames.forEach(product => {
-        const salesData = labels.map(label => monthlySales[label][product] || 0);
-        datasets.push({
-            label: product,
-            data: salesData,
-            borderWidth: 1
-        });
-    });
+    const labels = Object.keys(groupedData);
+    const values = Object.values(groupedData);
 
     new Chart(ctx, {
-        type: "bar",
-        data: { labels, datasets },
-        options: { responsive: true }
-    });
-}
-
-function plotTopSellingProductsGraph(totalSales) {
-    const ctx = document.getElementById("topSellingGraph").getContext("2d");
-    const labels = Object.keys(totalSales);
-    const values = Object.values(totalSales);
-
-    new Chart(ctx, {
-        type: "bar",
+        type: "line",
         data: {
             labels: labels,
             datasets: [{
                 label: "Total Sales",
                 data: values,
-                backgroundColor: "blue"
+                borderColor: "blue",
+                fill: false
             }]
-        },
-        options: { responsive: true }
+        }
     });
 }
 
-function plotCurrentStockList(currentStock) {
-    const stockContainer = document.getElementById("currentStockList");
-    if (!stockContainer) {
-        console.error("❌ Element #currentStockList not found in index.html!");
-        return;
+// ✅ Sales Per Month (Now in Bar Graph)
+function plotSalesPerMonth(data) {
+    const monthlySales = {};
+
+    data.forEach(entry => {
+        const date = new Date(entry.date);
+        if (isNaN(date)) return;
+
+        const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+        if (!monthlySales[monthYear]) {
+            monthlySales[monthYear] = 0;
+        }
+        monthlySales[monthYear] += entry.sales;
+    });
+
+    const labels = Object.keys(monthlySales);
+    const values = Object.values(monthlySales);
+
+    const ctx = document.getElementById("salesMonthCanvas").getContext("2d");
+    
+    // Clear previous chart instance if it exists
+    if (window.salesMonthChart) {
+        window.salesMonthChart.destroy();
     }
 
-    stockContainer.innerHTML = ""; // Clear previous content
+    window.salesMonthChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Sales Per Month",
+                data: values,
+                backgroundColor: "green"
+            }]
+        }
+    });
+}
 
-    console.log("🔍 Extracted Stock Values:", currentStock); // Debugging log
+// ✅ Top-Selling Product
+function displayTopSellingProduct(data) {
+    const productSales = {};
 
-    // Only include products that are in the currentStock object
-    const sortedStock = Object.entries(currentStock)
-        .filter(([product, stock]) => stock !== "No Data" && stock !== undefined) // Skip products with no data
-        .sort((a, b) => b[1] - a[1]); // Sort by stock value (descending)
+    data.forEach(entry => {
+        if (!productSales[entry.product]) {
+            productSales[entry.product] = 0;
+        }
+        productSales[entry.product] += entry.sales;
+    });
 
-    if (sortedStock.length === 0) {
-        const listItem = document.createElement("p");
-        listItem.textContent = "No stock data available for any products.";
-        stockContainer.appendChild(listItem);
-    } else {
-        sortedStock.forEach(([product, stock]) => {
-            const listItem = document.createElement("p");
-            listItem.textContent = `${product}: ${stock} units`;
-            stockContainer.appendChild(listItem);
-        });
-    }
+    let topProduct = Object.keys(productSales).reduce((a, b) => productSales[a] > productSales[b] ? a : b);
 
-    console.log("✅ Current stock list updated successfully!");
+    document.getElementById("topProductResult").innerHTML = `
+        <h3>Top-Selling Product</h3>
+        <p>${topProduct}: ${productSales[topProduct]} sales</p>
+    `;
+}
+
+// ✅ Current Stock Per Product
+function displayCurrentStock(data) {
+    const productStock = {};
+
+    data.forEach(entry => {
+        if (!productStock[entry.product]) {
+            productStock[entry.product] = 0;
+        }
+        productStock[entry.product] += entry.sales;
+    });
+
+    document.getElementById("currentStockResult").innerHTML = `
+        <h3>Current Stock Per Product</h3>
+        <ul>${Object.entries(productStock).map(([product, stock]) => `<li>${product}: ${stock} units</li>`).join("")}</ul>
+    `;
 }
